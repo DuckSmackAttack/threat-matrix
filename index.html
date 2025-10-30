@@ -11,27 +11,13 @@
     .status { font-size:12px; color:#5f6368; }
     .btn { padding:6px 10px; border:1px solid #d0d0d0; background:#fff; border-radius:6px; cursor:pointer; font-weight:600; font-size:13px; }
     .btn:hover { background:#f3f4f4; }
-
-    .threat-table {
-      border-collapse: collapse;
-      width: 100%;
-      margin-bottom: 10px;
-      table-layout: fixed;
-    }
-    .threat-table th:nth-child(1), .threat-table td:nth-child(1){width:45%;}
+    .threat-table { border-collapse: collapse; width: 100%; margin-bottom: 10px; table-layout: fixed; }
+    .threat-table th:nth-child(1), .threat-table td:nth-child(1){ width:45%; }
     .threat-table th:nth-child(2), .threat-table td:nth-child(2),
-    .threat-table th:nth-child(3), .threat-table td:nth-child(3){width:27.5%;}
-    .threat-table th, .threat-table td {
-      border: 1px solid #e0e0e0;
-      padding: 10px;
-      vertical-align: middle;
-      text-align: center;
-      background:#fff;
-      word-break:break-word;
-    }
-    .threat-table th {background:#e8f0fe;color:#1a73e8;font-weight:600;}
-    .threat-table tbody tr:nth-child(even){background:#fafafa;}
-
+    .threat-table th:nth-child(3), .threat-table td:nth-child(3){ width:27.5%; }
+    .threat-table th, .threat-table td { border:1px solid #e0e0e0; padding:10px; vertical-align:middle; text-align:center; background:#fff; word-break:break-word;}
+    .threat-table th { background:#e8f0fe; color:#1a73e8; font-weight:600; }
+    .threat-table tbody tr:nth-child(even){ background:#fafafa; }
     .rating-high{color:#b71c1c;font-weight:600;}
     .rating-med{color:#f57c00;font-weight:600;}
     .rating-low{color:#2e7d32;font-weight:600;}
@@ -41,13 +27,11 @@
     .rating-high .rating-select{color:#b71c1c;}
     .rating-med .rating-select{color:#f57c00;}
     .rating-low .rating-select{color:#2e7d32;}
-
     .details{text-align:left;padding:8px 20px;background:#fdfdfd;border:1px solid #e0e0e0;border-top:none;margin-bottom:15px;}
     .details .controls{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px;}
     .details-ol{margin:0;padding-left:20px;}
     .details-ol li{margin:5px 0;padding:6px 8px;background:#fff;border:1px dashed #e0e0e0;border-radius:6px;}
     .details-ol li[contenteditable="true"]:focus{outline:2px solid #cde2ff;border-color:#cde2ff;background:#f8fbff;}
-
     .delete-threat-btn{color:#b71c1c;border-color:#b71c1c;}
     .delete-threat-btn:hover{background:#ffeaea;}
     .add-threat-bar{display:flex;justify-content:flex-end;padding:10px 12px 16px 12px;}
@@ -58,10 +42,10 @@
   <div class="frame">
     <div class="threat-wrap" id="threatContainer">
       <div class="toolbar">
-        <div class="status" id="saveStatus">Ready.</div>
+        <div class="status" id="saveStatus">Loading…</div>
         <div style="display:flex; gap:8px;">
-          <button class="btn" id="saveNowBtn">Save</button>
-          <button class="btn" id="clearBtn">Clear</button>
+          <button class="btn" id="saveNowBtn">Save Now</button>
+          <button class="btn" id="reloadBtn">Reload</button>
         </div>
       </div>
 
@@ -121,84 +105,130 @@
 
   <script>
     (function(){
-      const STORAGE_KEY='ThreatMatrix_v1';
-      const blocksHolder=document.getElementById('threatBlocks');
-      const tpl=document.getElementById('threatTemplate');
-      const statusEl=document.getElementById('saveStatus');
+      const API = {
+        url: 'YOUR_WEB_APP_URL', // e.g. https://script.google.com/macros/s/XXXX/exec
+        token: 'YOUR_SHARED_SECRET'
+      };
 
-      function setStatus(t){statusEl.textContent=t;}
-      function applyRatingClass(td,v){td.className=td.className.replace(/\brating-(high|med|low|none)\b/g,'').trim()+' '+(v?'rating-'+v:'rating-none');}
-      function blockToJSON(b){
-        const title=(b.querySelector('strong[contenteditable]')?.textContent||'').trim();
-        const gsa=b.querySelector('td:nth-child(2) .rating-select')?.value||'';
-        const impact=b.querySelector('td:nth-child(3) .rating-select')?.value||'';
-        const items=[...b.querySelectorAll('.details-ol li')].map(li=>li.textContent.trim()).filter(Boolean);
-        return{title,gsa,impact,items};
+      const blocksHolder = document.getElementById('threatBlocks');
+      const tpl = document.getElementById('threatTemplate');
+      const statusEl = document.getElementById('saveStatus');
+
+      function setStatus(t){ statusEl.textContent = t; }
+      function applyRatingClass(td, v){
+        td.className = td.className.replace(/\brating-(high|med|low|none)\b/g,'').trim() + ' ' + (v ? 'rating-'+v : 'rating-none');
       }
-      function serializeAll(){return{threats:[...blocksHolder.querySelectorAll('.threat-block')].map(blockToJSON)};}
+      function blockToJSON(block){
+        const title = (block.querySelector('strong[contenteditable]')?.textContent || '').trim();
+        const gsa = block.querySelector('td:nth-child(2) .rating-select')?.value || '';
+        const impact = block.querySelector('td:nth-child(3) .rating-select')?.value || '';
+        const items = Array.from(block.querySelectorAll('.details-ol li')).map(li=>li.textContent.trim()).filter(Boolean);
+        return { title, gsa, impact, items };
+      }
+      function serializeAll(){ return { threats: Array.from(blocksHolder.querySelectorAll('.threat-block')).map(blockToJSON) }; }
+
       function renderThreat(th){
-        const f=document.importNode(tpl.content,true);
-        const s=f.querySelector('.threat-block');
-        const title=s.querySelector('strong[contenteditable]');
-        const gsaSel=s.querySelector('td:nth-child(2) .rating-select');
-        const impSel=s.querySelector('td:nth-child(3) .rating-select');
-        title.textContent=(th&&th.title)||'New Threat';
-        if(gsaSel){gsaSel.value=(th&&th.gsa)||'';applyRatingClass(gsaSel.closest('.rating-cell'),gsaSel.value);}
-        if(impSel){impSel.value=(th&&th.impact)||'';applyRatingClass(impSel.closest('.rating-cell'),impSel.value);}
-        const list=s.querySelector('.details-ol');
-        list.innerHTML='';
-        ((th&&th.items)||['New item…']).forEach(t=>{
-          const li=document.createElement('li');li.setAttribute('contenteditable','true');li.textContent=t;list.appendChild(li);
+        const fragment = document.importNode(tpl.content, true);
+        const section = fragment.querySelector('.threat-block');
+        const titleEl = section.querySelector('strong[contenteditable]');
+        const gsaSel = section.querySelector('td:nth-child(2) .rating-select');
+        const impSel = section.querySelector('td:nth-child(3) .rating-select');
+
+        titleEl.textContent = (th && th.title) || 'New Threat';
+        if(gsaSel){ gsaSel.value = (th && th.gsa) || ''; applyRatingClass(gsaSel.closest('.rating-cell'), gsaSel.value); }
+        if(impSel){ impSel.value = (th && th.impact) || ''; applyRatingClass(impSel.closest('.rating-cell'), impSel.value); }
+
+        const list = section.querySelector('.details-ol');
+        list.innerHTML = '';
+        ((th && th.items) || ['New item…']).forEach(t=>{
+          const li = document.createElement('li');
+          li.setAttribute('contenteditable','true');
+          li.textContent = t;
+          list.appendChild(li);
         });
-        blocksHolder.appendChild(s);
-        return s;
+
+        blocksHolder.appendChild(section);
+        return section;
       }
 
-      function saveNow(){
-        const data=serializeAll();
-        localStorage.setItem(STORAGE_KEY,JSON.stringify(data));
-        setStatus('Saved '+new Date().toLocaleTimeString());
-      }
-      function loadData(){
-        const raw=localStorage.getItem(STORAGE_KEY);
-        if(!raw)return;
+      async function loadFromServer(){
         try{
-          const d=JSON.parse(raw);
-          if(d&&Array.isArray(d.threats)){
-            blocksHolder.innerHTML='';
-            d.threats.forEach(t=>renderThreat(t));
-          }
+          setStatus('Loading…');
+          const url = API.url + '?token=' + encodeURIComponent(API.token);
+          const res = await fetch(url, { method:'GET' });
+          if(!res.ok) throw new Error('HTTP ' + res.status);
+          const data = await res.json();
+          blocksHolder.innerHTML = '';
+          (data?.threats || []).forEach(t => renderThreat(t));
           setStatus('Loaded.');
-        }catch(e){console.error(e);}
+        }catch(err){
+          console.error(err);
+          setStatus('Failed to load (server).');
+        }
       }
 
-      document.getElementById('addThreatBtn').addEventListener('click',()=>{
-        const s=renderThreat({title:'New Threat',gsa:'',impact:'',items:['New item…']});
-        s.querySelector('strong').focus(); scheduleSave();
-      });
-      document.getElementById('threatContainer').addEventListener('click',e=>{
-        const btn=e.target.closest('button'); if(!btn)return;
-        const act=btn.dataset.action; if(!act)return;
-        const b=btn.closest('.threat-block'); const list=b.querySelector('.details-ol');
-        if(act==='add'){const li=document.createElement('li');li.contentEditable=true;li.textContent='New item…';list.appendChild(li);li.focus();}
-        if(act==='remove'){list.lastElementChild?.remove();}
-        if(act==='clear'){list.innerHTML='';}
-        if(act==='delete'){b.remove();}
+      async function saveToServer(){
+        try{
+          setStatus('Saving…');
+          const url = API.url + '?token=' + encodeURIComponent(API.token);
+          const payload = serializeAll();
+          const res = await fetch(url, {
+            method:'POST',
+            headers:{ 'Content-Type':'application/json' },
+            body: JSON.stringify(payload)
+          });
+          if(!res.ok){
+            const txt = await res.text();
+            throw new Error('HTTP ' + res.status + ' ' + txt);
+          }
+          setStatus('Saved.');
+        }catch(err){
+          console.error(err);
+          setStatus('Save failed.');
+        }
+      }
+
+      // UI
+      document.getElementById('addThreatBtn').addEventListener('click', ()=>{
+        const sec = renderThreat({ title:'New Threat', gsa:'', impact:'', items:['New item…'] });
+        sec.querySelector('strong').focus();
         scheduleSave();
       });
-      document.getElementById('threatContainer').addEventListener('input',e=>{
-        if(e.target.matches('strong[contenteditable], .details-ol li[contenteditable]'))scheduleSave();
+
+      document.getElementById('threatContainer').addEventListener('click', e=>{
+        let btn = e.target.closest('button');
+        if(!btn) return;
+        const action = btn.getAttribute('data-action');
+        if(!action) return;
+        const block = btn.closest('.threat-block');
+        const list = block.querySelector('.details-ol');
+
+        if(action === 'add'){ const li = document.createElement('li'); li.contentEditable = true; li.textContent = 'New item…'; list.appendChild(li); li.focus(); }
+        if(action === 'remove'){ list.lastElementChild?.remove(); }
+        if(action === 'clear'){ list.innerHTML = ''; }
+        if(action === 'delete'){ block.remove(); }
+        scheduleSave();
       });
-      document.getElementById('threatContainer').addEventListener('change',e=>{
-        const sel=e.target; if(!sel.classList.contains('rating-select'))return;
-        applyRatingClass(sel.closest('.rating-cell'),sel.value); scheduleSave();
+
+      document.getElementById('threatContainer').addEventListener('input', e=>{
+        if (e.target.matches('strong[contenteditable], .details-ol li[contenteditable]')) scheduleSave();
       });
-      document.getElementById('saveNowBtn').addEventListener('click',saveNow);
-      document.getElementById('clearBtn').addEventListener('click',()=>{
-        if(confirm('Clear all threats?')){blocksHolder.innerHTML='';localStorage.removeItem(STORAGE_KEY);setStatus('Cleared.');}
+      document.getElementById('threatContainer').addEventListener('change', e=>{
+        const sel = e.target;
+        if(!sel.classList || !sel.classList.contains('rating-select')) return;
+        applyRatingClass(sel.closest('.rating-cell'), sel.value);
+        scheduleSave();
       });
-      let t; function scheduleSave(){clearTimeout(t);t=setTimeout(saveNow,600);}
-      loadData();
+
+      document.getElementById('saveNowBtn').addEventListener('click', saveToServer);
+      document.getElementById('reloadBtn').addEventListener('click', loadFromServer);
+
+      // Debounced autosave
+      let saveTimer = null;
+      function scheduleSave(){ clearTimeout(saveTimer); saveTimer = setTimeout(saveToServer, 600); }
+
+      // Start
+      loadFromServer();
     })();
   </script>
 </body>
