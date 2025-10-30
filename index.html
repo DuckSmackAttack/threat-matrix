@@ -103,133 +103,47 @@
     </section>
   </template>
 
-  <script>
-    (function(){
-      const API = {
-        url: 'https://script.google.com/macros/s/AKfycbwh_gRGkqcUPP0f7oMLfOcsvkfdmXWjQIKW_qFW_rFS7iZwYnb4GQbTe8eyYEtsTN73gg/exec', // e.g. https://script.google.com/macros/s/XXXX/exec
-        token: 'Quack'
-      };
+<script>
+const API = {
+  url: 'https://script.google.com/macros/s/AKfycbwh_gRGkqcUPP0f7oMLfOcsvkfdmXWjQIKW_qFW_rFS7iZwYnb4GQbTe8eyYEtsTN73gg/exec',
+  token: 'Quack'
+};
 
-      const blocksHolder = document.getElementById('threatBlocks');
-      const tpl = document.getElementById('threatTemplate');
-      const statusEl = document.getElementById('saveStatus');
+// --- loader ---
+async function loadFromServer(){
+  try{
+    setStatus('Loading…');
+    const res = await fetch(API.url + '?token=' + encodeURIComponent(API.token));
+    const text = await res.text();
+    if(!res.ok) throw new Error('HTTP '+res.status+' '+text);
+    const data = JSON.parse(text);
+    blocksHolder.innerHTML = '';
+    (data?.threats || []).forEach(t => renderThreat(t));
+    setStatus('Loaded.');
+  }catch(err){
+    console.error(err);
+    setStatus('Failed to load (server).');
+    alert('Server said:\n' + err.message);
+  }
+}
 
-      function setStatus(t){ statusEl.textContent = t; }
-      function applyRatingClass(td, v){
-        td.className = td.className.replace(/\brating-(high|med|low|none)\b/g,'').trim() + ' ' + (v ? 'rating-'+v : 'rating-none');
-      }
-      function blockToJSON(block){
-        const title = (block.querySelector('strong[contenteditable]')?.textContent || '').trim();
-        const gsa = block.querySelector('td:nth-child(2) .rating-select')?.value || '';
-        const impact = block.querySelector('td:nth-child(3) .rating-select')?.value || '';
-        const items = Array.from(block.querySelectorAll('.details-ol li')).map(li=>li.textContent.trim()).filter(Boolean);
-        return { title, gsa, impact, items };
-      }
-      function serializeAll(){ return { threats: Array.from(blocksHolder.querySelectorAll('.threat-block')).map(blockToJSON) }; }
-
-      function renderThreat(th){
-        const fragment = document.importNode(tpl.content, true);
-        const section = fragment.querySelector('.threat-block');
-        const titleEl = section.querySelector('strong[contenteditable]');
-        const gsaSel = section.querySelector('td:nth-child(2) .rating-select');
-        const impSel = section.querySelector('td:nth-child(3) .rating-select');
-
-        titleEl.textContent = (th && th.title) || 'New Threat';
-        if(gsaSel){ gsaSel.value = (th && th.gsa) || ''; applyRatingClass(gsaSel.closest('.rating-cell'), gsaSel.value); }
-        if(impSel){ impSel.value = (th && th.impact) || ''; applyRatingClass(impSel.closest('.rating-cell'), impSel.value); }
-
-        const list = section.querySelector('.details-ol');
-        list.innerHTML = '';
-        ((th && th.items) || ['New item…']).forEach(t=>{
-          const li = document.createElement('li');
-          li.setAttribute('contenteditable','true');
-          li.textContent = t;
-          list.appendChild(li);
-        });
-
-        blocksHolder.appendChild(section);
-        return section;
-      }
-
-      async function loadFromServer(){
-        try{
-          setStatus('Loading…');
-          const url = API.url + '?token=' + encodeURIComponent(API.token);
-          const res = await fetch(url, { method:'GET' });
-          if(!res.ok) throw new Error('HTTP ' + res.status);
-          const data = await res.json();
-          blocksHolder.innerHTML = '';
-          (data?.threats || []).forEach(t => renderThreat(t));
-          setStatus('Loaded.');
-        }catch(err){
-          console.error(err);
-          setStatus('Failed to load (server).');
-        }
-      }
-
-      async function saveToServer(){
-        try{
-          setStatus('Saving…');
-          const url = API.url + '?token=' + encodeURIComponent(API.token);
-          const payload = serializeAll();
-          const res = await fetch(url, {
-            method:'POST',
-            headers:{ 'Content-Type':'application/json' },
-            body: JSON.stringify(payload)
-          });
-          if(!res.ok){
-            const txt = await res.text();
-            throw new Error('HTTP ' + res.status + ' ' + txt);
-          }
-          setStatus('Saved.');
-        }catch(err){
-          console.error(err);
-          setStatus('Save failed.');
-        }
-      }
-
-      // UI
-      document.getElementById('addThreatBtn').addEventListener('click', ()=>{
-        const sec = renderThreat({ title:'New Threat', gsa:'', impact:'', items:['New item…'] });
-        sec.querySelector('strong').focus();
-        scheduleSave();
-      });
-
-      document.getElementById('threatContainer').addEventListener('click', e=>{
-        let btn = e.target.closest('button');
-        if(!btn) return;
-        const action = btn.getAttribute('data-action');
-        if(!action) return;
-        const block = btn.closest('.threat-block');
-        const list = block.querySelector('.details-ol');
-
-        if(action === 'add'){ const li = document.createElement('li'); li.contentEditable = true; li.textContent = 'New item…'; list.appendChild(li); li.focus(); }
-        if(action === 'remove'){ list.lastElementChild?.remove(); }
-        if(action === 'clear'){ list.innerHTML = ''; }
-        if(action === 'delete'){ block.remove(); }
-        scheduleSave();
-      });
-
-      document.getElementById('threatContainer').addEventListener('input', e=>{
-        if (e.target.matches('strong[contenteditable], .details-ol li[contenteditable]')) scheduleSave();
-      });
-      document.getElementById('threatContainer').addEventListener('change', e=>{
-        const sel = e.target;
-        if(!sel.classList || !sel.classList.contains('rating-select')) return;
-        applyRatingClass(sel.closest('.rating-cell'), sel.value);
-        scheduleSave();
-      });
-
-      document.getElementById('saveNowBtn').addEventListener('click', saveToServer);
-      document.getElementById('reloadBtn').addEventListener('click', loadFromServer);
-
-      // Debounced autosave
-      let saveTimer = null;
-      function scheduleSave(){ clearTimeout(saveTimer); saveTimer = setTimeout(saveToServer, 600); }
-
-      // Start
-      loadFromServer();
-    })();
-  </script>
+// --- saver (NO Content-Type header) ---
+async function saveToServer(){
+  try{
+    setStatus('Saving…');
+    const res = await fetch(API.url + '?token=' + encodeURIComponent(API.token), {
+      method:'POST',
+      body: JSON.stringify(serializeAll()) // plain text body => no preflight
+    });
+    const text = await res.text();
+    if(!res.ok || text !== 'OK') throw new Error('HTTP '+res.status+' '+text);
+    setStatus('Saved.');
+  }catch(err){
+    console.error(err);
+    setStatus('Save failed.');
+    alert('Server said:\n' + err.message);
+  }
+}
+</script>
 </body>
 </html>
