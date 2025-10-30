@@ -11,13 +11,15 @@
     .status { font-size:12px; color:#5f6368; }
     .btn { padding:6px 10px; border:1px solid #d0d0d0; background:#fff; border-radius:6px; cursor:pointer; font-weight:600; font-size:13px; }
     .btn:hover { background:#f3f4f4; }
+
     .threat-table { border-collapse: collapse; width: 100%; margin-bottom: 10px; table-layout: fixed; }
     .threat-table th:nth-child(1), .threat-table td:nth-child(1){ width:45%; }
     .threat-table th:nth-child(2), .threat-table td:nth-child(2),
     .threat-table th:nth-child(3), .threat-table td:nth-child(3){ width:27.5%; }
-    .threat-table th, .threat-table td { border:1px solid #e0e0e0; padding:10px; vertical-align:middle; text-align:center; background:#fff; word-break:break-word;}
+    .threat-table th, .threat-table td { border: 1px solid #e0e0e0; padding: 10px; vertical-align: middle; text-align: center; background:#fff; word-break:break-word; }
     .threat-table th { background:#e8f0fe; color:#1a73e8; font-weight:600; }
     .threat-table tbody tr:nth-child(even){ background:#fafafa; }
+
     .rating-high{color:#b71c1c;font-weight:600;}
     .rating-med{color:#f57c00;font-weight:600;}
     .rating-low{color:#2e7d32;font-weight:600;}
@@ -27,11 +29,13 @@
     .rating-high .rating-select{color:#b71c1c;}
     .rating-med .rating-select{color:#f57c00;}
     .rating-low .rating-select{color:#2e7d32;}
+
     .details{text-align:left;padding:8px 20px;background:#fdfdfd;border:1px solid #e0e0e0;border-top:none;margin-bottom:15px;}
     .details .controls{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px;}
     .details-ol{margin:0;padding-left:20px;}
     .details-ol li{margin:5px 0;padding:6px 8px;background:#fff;border:1px dashed #e0e0e0;border-radius:6px;}
     .details-ol li[contenteditable="true"]:focus{outline:2px solid #cde2ff;border-color:#cde2ff;background:#f8fbff;}
+
     .delete-threat-btn{color:#b71c1c;border-color:#b71c1c;}
     .delete-threat-btn:hover{background:#ffeaea;}
     .add-threat-bar{display:flex;justify-content:flex-end;padding:10px 12px 16px 12px;}
@@ -103,47 +107,136 @@
     </section>
   </template>
 
-<script>
-const API = {
-  url: 'https://script.google.com/macros/s/AKfycbwh_gRGkqcUPP0f7oMLfOcsvkfdmXWjQIKW_qFW_rFS7iZwYnb4GQbTe8eyYEtsTN73gg/exec',
-  token: 'Quack'
-};
+  <script>
+    (function(){
+      // === Replace with your live Web App URL & token ===
+      const API = {
+        url: 'https://script.google.com/macros/s/AKfycbzlYu6R7itnp0TfAmAZ00uPgres8beh0RVz-2qNp1Cz5KKumaiLownjYGYblrgqy9EQEQ/exec',
+        token: 'Quack'
+      };
 
-// --- loader ---
-async function loadFromServer(){
-  try{
-    setStatus('Loading…');
-    const res = await fetch(API.url + '?token=' + encodeURIComponent(API.token));
-    const text = await res.text();
-    if(!res.ok) throw new Error('HTTP '+res.status+' '+text);
-    const data = JSON.parse(text);
-    blocksHolder.innerHTML = '';
-    (data?.threats || []).forEach(t => renderThreat(t));
-    setStatus('Loaded.');
-  }catch(err){
-    console.error(err);
-    setStatus('Failed to load (server).');
-    alert('Server said:\n' + err.message);
-  }
-}
+      const blocksHolder = document.getElementById('threatBlocks');
+      const tpl = document.getElementById('threatTemplate');
+      const statusEl = document.getElementById('saveStatus');
 
-// --- saver (NO Content-Type header) ---
-async function saveToServer(){
-  try{
-    setStatus('Saving…');
-    const res = await fetch(API.url + '?token=' + encodeURIComponent(API.token), {
-      method:'POST',
-      body: JSON.stringify(serializeAll()) // plain text body => no preflight
-    });
-    const text = await res.text();
-    if(!res.ok || text !== 'OK') throw new Error('HTTP '+res.status+' '+text);
-    setStatus('Saved.');
-  }catch(err){
-    console.error(err);
-    setStatus('Save failed.');
-    alert('Server said:\n' + err.message);
-  }
-}
-</script>
+      function setStatus(t){ statusEl.textContent = t; }
+      function applyRatingClass(td, v){
+        td.className = td.className.replace(/\brating-(high|med|low|none)\b/g,'').trim() + ' ' + (v ? 'rating-'+v : 'rating-none');
+      }
+      function blockToJSON(block){
+        const title  = (block.querySelector('strong[contenteditable]')?.textContent || '').trim();
+        const gsa    = block.querySelector('td:nth-child(2) .rating-select')?.value || '';
+        const impact = block.querySelector('td:nth-child(3) .rating-select')?.value || '';
+        const items  = Array.from(block.querySelectorAll('.details-ol li'))
+                           .map(li=>li.textContent.trim()).filter(Boolean);
+        return { title, gsa, impact, items };
+      }
+      function serializeAll(){ return { threats: Array.from(blocksHolder.querySelectorAll('.threat-block')).map(blockToJSON) }; }
+
+      function renderThreat(th){
+        const fragment = document.importNode(tpl.content, true);
+        const section  = fragment.querySelector('.threat-block');
+        const titleEl  = section.querySelector('strong[contenteditable]');
+        const gsaSel   = section.querySelector('td:nth-child(2) .rating-select');
+        const impSel   = section.querySelector('td:nth-child(3) .rating-select');
+
+        titleEl.textContent = (th && th.title) || 'New Threat';
+        if(gsaSel){ gsaSel.value = (th && th.gsa) || '';   applyRatingClass(gsaSel.closest('.rating-cell'), gsaSel.value); }
+        if(impSel){ impSel.value = (th && th.impact) || ''; applyRatingClass(impSel.closest('.rating-cell'), impSel.value); }
+
+        const list = section.querySelector('.details-ol');
+        list.innerHTML = '';
+        ((th && th.items) || ['New item…']).forEach(t=>{
+          const li = document.createElement('li');
+          li.setAttribute('contenteditable','true');
+          li.textContent = t;
+          list.appendChild(li);
+        });
+
+        blocksHolder.appendChild(section);
+        return section;
+      }
+
+      async function loadFromServer(){
+        try{
+          setStatus('Loading…');
+          const res  = await fetch(API.url + '?token=' + encodeURIComponent(API.token));
+          const text = await res.text();
+          if(!res.ok) throw new Error('HTTP '+res.status+' '+text);
+          const data = JSON.parse(text);
+
+          blocksHolder.innerHTML = '';
+          (data?.threats || []).forEach(t => renderThreat(t));
+          setStatus('Loaded.');
+        }catch(err){
+          console.error(err);
+          setStatus('Failed to load (server).');
+          alert('Server said:\n' + err.message);
+        }
+      }
+
+      async function saveToServer(){
+        try{
+          setStatus('Saving…');
+          const res  = await fetch(API.url + '?token=' + encodeURIComponent(API.token), {
+            method:'POST',
+            // IMPORTANT: no Content-Type header -> no CORS preflight
+            body: JSON.stringify(serializeAll())
+          });
+          const text = await res.text();
+          if(!res.ok || text !== 'OK') throw new Error('HTTP '+res.status+' '+text);
+          setStatus('Saved.');
+        }catch(err){
+          console.error(err);
+          setStatus('Save failed.');
+          alert('Server said:\n' + err.message);
+        }
+      }
+
+      // UI bindings
+      document.getElementById('addThreatBtn').addEventListener('click', ()=>{
+        const sec = renderThreat({ title:'New Threat', gsa:'', impact:'', items:['New item…'] });
+        sec.querySelector('strong').focus();
+        scheduleSave();
+      });
+
+      document.getElementById('threatContainer').addEventListener('click', e=>{
+        let btn = e.target.closest('button');
+        if(!btn) return;
+        const action = btn.getAttribute('data-action');
+        if(!action) return;
+
+        const block = btn.closest('.threat-block');
+        const list  = block.querySelector('.details-ol');
+
+        if(action === 'add'){ const li = document.createElement('li'); li.contentEditable = true; li.textContent = 'New item…'; list.appendChild(li); li.focus(); }
+        if(action === 'remove'){ list.lastElementChild?.remove(); }
+        if(action === 'clear'){ list.innerHTML = ''; }
+        if(action === 'delete'){ block.remove(); }
+        scheduleSave();
+      });
+
+      document.getElementById('threatContainer').addEventListener('input', e=>{
+        if (e.target.matches('strong[contenteditable], .details-ol li[contenteditable]')) scheduleSave();
+      });
+
+      document.getElementById('threatContainer').addEventListener('change', e=>{
+        const sel = e.target;
+        if(!sel.classList || !sel.classList.contains('rating-select')) return;
+        applyRatingClass(sel.closest('.rating-cell'), sel.value);
+        scheduleSave();
+      });
+
+      document.getElementById('saveNowBtn').addEventListener('click', saveToServer);
+      document.getElementById('reloadBtn').addEventListener('click', loadFromServer);
+
+      // Debounced autosave
+      let saveTimer = null;
+      function scheduleSave(){ clearTimeout(saveTimer); saveTimer = setTimeout(saveToServer, 600); }
+
+      // Start
+      loadFromServer();
+    })();
+  </script>
 </body>
 </html>
